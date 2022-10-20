@@ -1,0 +1,6 @@
+def prog():
+  local p1=pDISPLACEMENT_VALUE
+  local frame=pFRAME_VALUE
+  local towardsPos=pose_trans(frame,p1)
+  movel(towardsPos, a=ACC, v=VEL)
+end'
