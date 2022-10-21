@@ -66,7 +66,7 @@ class RelativeMove(object):
         success = True
 
         self._stop_srv()
-        rospy.sleep(0.5)
+        rospy.sleep(5)
         try:
             (trans,rot) = self._listener.lookupTransform('/base_link', goal.relative_pose.header.frame_id, rospy.Time(0))
             print("tran = ",trans,", rot = ", rot)
@@ -74,22 +74,24 @@ class RelativeMove(object):
 
             displacement_trans=[goal.relative_pose.pose.position.x,goal.relative_pose.pose.position.y,goal.relative_pose.pose.position.z]
             displacement_quat=[goal.relative_pose.pose.orientation.x, goal.relative_pose.pose.orientation.y, goal.relative_pose.pose.orientation.z, goal.relative_pose.pose.orientation.w]
-            displacement=displacement_trans+quat_to_ur_axis_angle(displacement_quat)
+            displacement=displacement_trans #+quat_to_ur_axis_angle(displacement_quat)
             print(frame)
             print(displacement)
 
             command=self._template
-            command=command.replace("FRAME_VALUE",str(frame))
-            command=command.replace("DISPLACEMENT_VALUE",str(displacement))
-            command=command.replace("ACC",str(1.2))
+            command=command.replace("XBASE",str(displacement[0]))
+            command=command.replace("YBASE",str(displacement[1]))
+            command=command.replace("ZBASE",str(displacement[2]))
+            # command=command.replace("DISPLACEMENT_VALUE",str(displacement))
+            command=command.replace("ACCELERAZIONE",str(1.2))
             vel=goal.target_linear_velocity
             if vel==0:
                 vel=0.05
-            command=command.replace("VEL",str(vel))
+            command=command.replace("VELOCITA",str(vel))
 
 
             self._pub.publish(command)
-
+            rospy.sleep(10.5)
             rospy.loginfo('%s: Succeeded' % self._action_name)
             self._as.set_succeeded(self._result)
 
@@ -98,7 +100,7 @@ class RelativeMove(object):
             self._as.set_failed(self._result)
         #self._feedback.sequence = []
 
-        rospy.sleep(0.5)
+        rospy.sleep(5)
         while True:
             lg_state=self._state_srv();
             if lg_state.state.state=="STOPPED":

@@ -1,13 +1,4 @@
-def relmove():
-  set_tcp(p[0.0,0.0,0.149,0.0,0.0,0.0])
-  set_payload(0.9,[-0.008,0.003,0.057])
-  set_tool_communication(True, 115200, 0, 1, 1.5, 3.5)
-  set_tool_output_mode(0)
-  set_tool_digital_output_mode(0, 1)
-  set_tool_digital_output_mode(1, 1)
-  set_tool_voltage(24)
-  set_gravity([0.0, -1.2026031567627009E-15, -9.82])
-  set_safety_mode_transition_hardness(1)
+def touch_base_x():
   set_standard_analog_input_domain(0, 1)
   set_standard_analog_input_domain(1, 1)
   set_tool_analog_input_domain(0, 1)
@@ -15,6 +6,15 @@ def relmove():
   set_analog_outputdomain(0, 0)
   set_analog_outputdomain(1, 0)
   set_input_actions_to_default()
+  set_tcp(p[0.0,0.0,0.149,0.0,0.0,0.0])
+  set_payload(0.9,[-0.008,0.003,0.057])
+  set_gravity([0.0, -1.2026031567627009E-15, -9.82])
+  set_tool_communication(True, 115200, 0, 1, 1.5, 3.5)
+  set_tool_output_mode(0)
+  set_tool_digital_output_mode(0, 1)
+  set_tool_digital_output_mode(1, 1)
+  set_tool_voltage(24)
+  set_safety_mode_transition_hardness(1)
   # begin: URCap Installation Node
   #   Source: LMK Controller, 1.1.3, Cobotracks BV
   #   Type: Linear Motion Kit
@@ -1911,10 +1911,49 @@ def relmove():
   set_open_mm(50.0, 4)
   rq_current_limit_enabled = True
   # end: URCap Installation Node
-  global Waypoint_1_from_p=p[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  global Waypoint_1_to_p=  p[XBASE, YBASE, ZBASE, 0.0, 0.0, 0.0]
+  def calculate_point_to_move_towards(feature, direction, position_distance):
+    local posDir=[direction[0], direction[1], direction[2]]
+    if (norm(posDir) < 1e-6):
+      return get_target_waypoint()
+    end
+    local direction_vector_normalized=normalize(posDir)
+    local displacement_pose=p[direction_vector_normalized[0] * position_distance,direction_vector_normalized[1] * position_distance,direction_vector_normalized[2] * position_distance,0,0,0]
+    local wanted_displacement_in_base_frame=pose_sub(pose_trans(feature, displacement_pose), feature)
+    return pose_add(get_target_waypoint(), wanted_displacement_in_base_frame)
+  end
   $ 1 "Robot Program"
   $ 2 "MoveL"
-  $ 3 "Waypoint_1"
-  movel(pose_add(get_target_tcp_pose(), pose_sub(Waypoint_1_to_p, Waypoint_1_from_p)), a=ACCELERAZIONE, v=VELOCITA)
+  $ 3 "Direction: Base X+"
+  global move_thread_flag_3=0
+  thread move_thread_3():
+    enter_critical
+    move_thread_flag_3 = 1
+    local towardsPos=calculate_point_to_move_towards(p[0.0,0.0,0.0,0.0,0.0,0.0], [1.0,0.0,0.0], 1000.0)
+    movel(towardsPos, a=1.2, v=0.05)
+    move_thread_flag_3 = 2
+    exit_critical
+  end
+  move_thread_flag_3 = 0
+  move_thread_han_3 = run move_thread_3()
+  while (True):
+    $ 4 "Until (tool_contact_detection)"
+    local targetTcpDirection=get_target_tcp_speed()
+    local stepsToRetract=tool_contact(direction=targetTcpDirection)
+    if (stepsToRetract > 0):
+      kill move_thread_han_3
+      stopl(3.0)
+      local backTrackMovement=get_actual_joint_positions_history(stepsToRetract)
+      local contactPose=get_forward_kin(backTrackMovement)
+      local posDir=[targetTcpDirection[0],targetTcpDirection[1],targetTcpDirection[2]]
+      local retractTo=contactPose
+      if (norm(posDir) > 1e-6):
+        local normalizedPosDir=normalize(posDir)
+        local additionalRetraction=p[normalizedPosDir[0] * 0.003, normalizedPosDir[1] * 0.003, normalizedPosDir[2] * 0.003, 0, 0, 0]
+        retractTo = pose_sub(contactPose, additionalRetraction)
+      end
+      movel(retractTo, a=3.0, v=0.1)
+      break
+    end
+    sync()
+  end
 end
